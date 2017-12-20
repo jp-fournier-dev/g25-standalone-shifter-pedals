@@ -10,6 +10,9 @@
 
 #define DEBUG_SERIAL 1
 
+// Joystick for game controller emulation
+Joystick_ joystick;
+
 //////////////////////////////// SHIFTER /////////////////////////////////
 // Shifter pin definitions
 #define PIN_DATA        14
@@ -27,6 +30,9 @@
 
 #define SHIFTER_Y_135     800
 #define SHIFTER_Y_246     300
+
+#define SHIFTER_SEQ_UP_THRES    450    
+#define SHIFTER_SEQ_DOWN_THRES  650
 
 // Shifter button array register
 #define SHIFTER_BUTTON_COUNT 16
@@ -61,7 +67,20 @@ int shifter_y_axis = 0;
 #define SHIFTER_6       6
 #define SHIFTER_REVERSE 7     
 
+#define SHIFTER_MODE_H    0
+#define SHIFTER_MODE_SEQ  1
+
+#define SHIFTER_REV_OFF   0
+#define SHIFTER_REV_ON    1
+
+#define SHIFTER_SEQ_NO_SHIFT      0
+#define SHIFTER_SEQ_UP_SHIFT      1
+#define SHIFTER_SEQ_DOWN_SHIFT   -1
+
 int shifter_gear = SHIFTER_NEUTRAL;
+int shifter_reverse = SHIFTER_REV_OFF;
+int shifter_mode = SHIFTER_MODE_H;
+int shifter_seq  = SHIFTER_SEQ_NO_SHIFT;
 
 // Functions
 void read_shifter_buttons()
@@ -80,6 +99,9 @@ void read_shifter_buttons()
       digitalWrite(PIN_CLK, HIGH);     // Generate clock rising edge
       delayMicroseconds(10);             // Wait for signal to settle
     }
+
+    shifter_mode = shifter_buttons[BUT_MODE];
+    shifter_reverse = shifter_buttons[BUT_REVERSE];
 }
 
 void read_shifter_analogs()
@@ -90,40 +112,84 @@ void read_shifter_analogs()
 
 void select_shifter_gear()
 {
-    shifter_gear = SHIFTER_NEUTRAL;     // Default position of shifter is neutral
+    shifter_gear  = SHIFTER_NEUTRAL;     // Default position of shifter is neutral
+    shifter_seq   = SHIFTER_SEQ_NO_SHIFT;
 
-    if (shifter_x_axis < SHIFTER_X_12) // Shifter on the left?
+    if (shifter_mode == SHIFTER_MODE_H)
     {
-        if (shifter_y_axis > SHIFTER_Y_135) 
+        if (shifter_x_axis < SHIFTER_X_12) // Shifter on the left?
         {
-            shifter_gear = SHIFTER_1;  // 1st gear
+            if (shifter_y_axis > SHIFTER_Y_135) 
+            {
+                shifter_gear = SHIFTER_1;  // 1st gear
+            }
+            if (shifter_y_axis < SHIFTER_Y_246) 
+            {
+                shifter_gear = SHIFTER_2;  // 2nd gear
+            }
         }
-        if (shifter_y_axis < SHIFTER_Y_246) 
+        else if (shifter_x_axis > SHIFTER_X_56) // Shifter on the right?
         {
-            shifter_gear = SHIFTER_2;  // 2nd gear
+            if (shifter_y_axis > SHIFTER_Y_135) 
+            {
+                shifter_gear = SHIFTER_5;  // 5th gear
+            }
+            if (shifter_y_axis < SHIFTER_Y_246) 
+            {
+                if (shifter_reverse == SHIFTER_REV_OFF)
+                {
+                  shifter_gear = SHIFTER_6;  // 6th gear                  
+                }
+                else
+                {
+                  shifter_gear = SHIFTER_REVERSE; // Reverse
+                }
+            }
+        }
+        else // Shifter is in the middle
+        {
+            if (shifter_y_axis > SHIFTER_Y_135) 
+            {
+                shifter_gear = SHIFTER_3;  // 3rd gear
+            }
+            if (shifter_y_axis < SHIFTER_Y_246) 
+            {
+                shifter_gear = SHIFTER_4;  // 4th gear
+            }
         }
     }
-    else if (shifter_x_axis > SHIFTER_X_56) // Shifter on the right?
+    else  // If there shifter is set as a sequential mode
     {
-        if (shifter_y_axis > SHIFTER_Y_135) 
+        if (shifter_y_axis > SHIFTER_SEQ_DOWN_THRES)
         {
-            shifter_gear = SHIFTER_5;  // 5th gear
+            shifter_seq = SHIFTER_SEQ_DOWN_SHIFT;
         }
-        if (shifter_y_axis < SHIFTER_Y_246) 
+        else if(shifter_y_axis < SHIFTER_SEQ_UP_THRES)
         {
-            shifter_gear = SHIFTER_6;  // 6th gear
+            shifter_seq = SHIFTER_SEQ_UP_SHIFT;
         }
+        else  // Middle section
+        {
+            shifter_seq = SHIFTER_SEQ_NO_SHIFT;
+        }
+    }    
+}
+
+void set_shifter_inputs()
+{
+    // Reset shifter position buttons
+    for (int i = 0; i < 7; i++)
+    {
+        joystick.setButton(i, 0);
     }
-    else // Shifter is in the middle
+    if (shifter_gear > 0)
     {
-        if (shifter_y_axis > SHIFTER_Y_135) 
-        {
-            shifter_gear = SHIFTER_3;  // 3rd gear
-        }
-        if (shifter_y_axis < SHIFTER_Y_246) 
-        {
-            shifter_gear = SHIFTER_4;  // 4th gear
-        }
+        joystick.setButton(shifter_gear - 1, 1); 
+    }
+    
+    for (int i = 0; i < SHIFTER_BUTTON_COUNT; i++)
+    {
+        
     }
 }
 
@@ -145,6 +211,10 @@ void serial_debug_shifter()
     Serial.println("");
     Serial.println(" Gear: ");
     Serial.println(shifter_gear);  
+    Serial.print(" Mode: ");
+    Serial.println(shifter_mode);
+    Serial.print(" Shift: ");
+    Serial.println(shifter_seq);
 }
 #endif
 
@@ -154,7 +224,7 @@ void read_shifter()
     read_shifter_buttons();
     read_shifter_analogs();
     select_shifter_gear();
-    
+    set_shifter_inputs();
 #if DEBUG_SERIAL
     // Display shifter state in serial port
     serial_debug_shifter();
@@ -179,17 +249,12 @@ void setup_shifter()
 
 //////////////////////////////// END SHIFTER /////////////////////////////////
 
-// Create the Joystick
-Joystick_ Joystick;
-
-// Constant that maps the phyical pin to the joystick button.
-const int pinToButtonMap = 9;
 
 void setup() {
     setup_shifter();
     
     // Initialize Joystick Library
-    Joystick.begin();
+    joystick.begin(false);
 
 #if DEBUG_SERIAL
     // Virtual serial interface configuration
@@ -200,6 +265,8 @@ void setup() {
 void loop() {
 
   read_shifter();
+
+  joystick.sendState();
 
   delay(50);
 }
