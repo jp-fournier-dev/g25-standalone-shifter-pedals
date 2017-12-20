@@ -54,6 +54,9 @@ int shifter_buttons[SHIFTER_BUTTON_COUNT];
 #define BUT_DPAD_BOTTOM     14
 #define BUT_DPAD_TOP        15
 
+#define SHIFTER_SEQ_DOWN_BTN 20
+#define SHIFTER_SEQ_UP_BTN 21
+
 // Shifter position registers
 int shifter_x_axis = 0;
 int shifter_y_axis = 0;
@@ -76,6 +79,7 @@ int shifter_y_axis = 0;
 #define SHIFTER_SEQ_NO_SHIFT      0
 #define SHIFTER_SEQ_UP_SHIFT      1
 #define SHIFTER_SEQ_DOWN_SHIFT   -1
+
 
 int shifter_gear = SHIFTER_NEUTRAL;
 int shifter_reverse = SHIFTER_REV_OFF;
@@ -176,20 +180,38 @@ void select_shifter_gear()
 }
 
 void set_shifter_inputs()
-{
+{  
     // Reset shifter position buttons
     for (int i = 0; i < 7; i++)
     {
         joystick.setButton(i, 0);
     }
-    if (shifter_gear > 0)
-    {
-        joystick.setButton(shifter_gear - 1, 1); 
-    }
+    joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 0);  
+    joystick.setButton(SHIFTER_SEQ_UP_BTN, 0);  
     
-    for (int i = 0; i < SHIFTER_BUTTON_COUNT; i++)
+    if (shifter_mode == SHIFTER_MODE_H)
     {
-        
+        if (shifter_gear != SHIFTER_NEUTRAL)
+        {
+            joystick.setButton(shifter_gear - 1, 1); 
+        }              
+    }
+    else
+    {
+        if (shifter_seq == SHIFTER_SEQ_DOWN_SHIFT)
+        {
+          joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 1);        
+        }
+        else if(shifter_seq == SHIFTER_SEQ_UP_SHIFT)
+        {
+          joystick.setButton(SHIFTER_SEQ_UP_BTN, 1);          
+        }
+    }
+
+    // Starts at 4 to skip mode and reverse buttons which are not relevant
+    for (int i = 4; i < SHIFTER_BUTTON_COUNT; i++)
+    {
+        joystick.setButton(i + 3/* 7 - 4 */, shifter_buttons[i]);
     }
 }
 
