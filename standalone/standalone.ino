@@ -8,8 +8,11 @@
 
 #include <Joystick.h>
 
-#define DEBUG_SERIAL 1
-
+#define DEBUG_SERIAL 0
+#define DEBUG_SHIFTER 0
+#define DEBUG_PEDALS 1
+#define DEBUG_SERIAL_MS 100
+#define NORMAL_MS       2
 // Joystick for game controller emulation
 Joystick_ joystick;
 
@@ -79,7 +82,6 @@ int shifter_y_axis = 0;
 #define SHIFTER_SEQ_NO_SHIFT      0
 #define SHIFTER_SEQ_UP_SHIFT      1
 #define SHIFTER_SEQ_DOWN_SHIFT   -1
-
 
 int shifter_gear = SHIFTER_NEUTRAL;
 int shifter_reverse = SHIFTER_REV_OFF;
@@ -215,7 +217,7 @@ void set_shifter_inputs()
     }
 }
 
-#if DEBUG_SERIAL
+#if DEBUG_SERIAL && DEBUG_SHIFTER
 void serial_debug_shifter()
 {  
     Serial.print(" X axis: ");
@@ -231,7 +233,7 @@ void serial_debug_shifter()
         Serial.print(" ");
     }  
     Serial.println("");
-    Serial.println(" Gear: ");
+    Serial.print(" Gear: ");
     Serial.println(shifter_gear);  
     Serial.print(" Mode: ");
     Serial.println(shifter_mode);
@@ -247,7 +249,7 @@ void read_shifter()
     read_shifter_analogs();
     select_shifter_gear();
     set_shifter_inputs();
-#if DEBUG_SERIAL
+#if DEBUG_SERIAL && DEBUG_SHIFTER
     // Display shifter state in serial port
     serial_debug_shifter();
 #endif
@@ -271,9 +273,104 @@ void setup_shifter()
 
 //////////////////////////////// END SHIFTER /////////////////////////////////
 
+//////////////////////////////// BEGIN PEDALS /////////////////////////////////
+
+#define PIN_GAS     4
+#define PIN_BRAKE   6
+#define PIN_CLUTCH  8
+
+#define ANALOG_GAS      A6
+#define ANALOG_BRAKE    A7
+#define ANALOG_CLUTCH   A8
+
+#define MAX_AXIS 1023
+
+// Reading of pedal positions
+struct Pedal {
+  byte pin;
+  int min, max, cur, axis;  
+};
+
+// Pedal objects
+Pedal Gas, Brake, Clutch;
+
+int pedal_axis_value(struct Pedal* pedal) 
+{
+  int physicalRange = pedal->max - pedal->min;
+  if (physicalRange <= 0) {
+    return 0;
+  }
+
+  int result = map(pedal->cur, pedal->min, pedal->max, 0, MAX_AXIS);
+
+  if (result < 0) {
+    return MAX_AXIS;
+  }
+  if (result > MAX_AXIS) {
+    return 0;
+  }
+  return MAX_AXIS - result;
+}
+
+void update_pedal(struct Pedal* pedal){
+    pedal->cur = analogRead(pedal->pin);
+    
+    // Auto calibration
+    pedal->max = pedal->cur > pedal->max ? pedal->cur : pedal->max;
+    pedal->min = pedal->min == 0 || pedal->cur < pedal->min ? pedal->cur : pedal->min;    
+
+    pedal->axis = pedal_axis_value(pedal);
+}
+
+void setup_pedals()
+{
+    // Initialize shifter analog inputs
+    pinMode(ANALOG_GAS, INPUT_PULLUP);
+    pinMode(ANALOG_BRAKE, INPUT_PULLUP);
+    pinMode(ANALOG_CLUTCH, INPUT_PULLUP);
+    
+    Gas.pin = ANALOG_GAS;
+    Brake.pin = ANALOG_BRAKE;
+    Clutch.pin = ANALOG_CLUTCH;
+    Gas.min = MAX_AXIS;
+    Brake.min = MAX_AXIS;
+    Clutch.min = MAX_AXIS;
+  
+}
+#if DEBUG_SERIAL && DEBUG_PEDALS
+void serial_debug_pedals()
+{
+    Serial.print("Gas pedal : ");
+    Serial.println(Gas.cur);
+    Serial.print("Brake pedal : ");
+    Serial.println(Brake.cur);
+    Serial.print("Clutch pedal : ");
+    Serial.println(Clutch.cur);
+}
+#endif
+
+void read_pedals()
+{
+  // Get wheel inputs
+  update_pedal(&Gas);
+  update_pedal(&Brake);
+  update_pedal(&Clutch);
+
+  joystick.setXAxis(Gas.axis);
+  joystick.setYAxis(Brake.axis);
+  joystick.setZAxis(Clutch.axis);
+      
+#if DEBUG_SERIAL && DEBUG_PEDALS
+    serial_debug_pedals();
+#endif
+}
+
+//////////////////////////////// END PEDALS /////////////////////////////////
+
 
 void setup() {
     setup_shifter();
+    setup_pedals();
     
     // Initialize Joystick Library
     joystick.begin(false);
@@ -287,8 +384,12 @@ void setup() {
 void loop() {
 
   read_shifter();
+  read_pedals();
 
   joystick.sendState();
-
-  delay(50);
+#if DEBUG_SERIAL 
+  delay(DEBUG_SERIAL_MS);
+#else
+  delay(NORMAL_MS);
+#endif
 }
