@@ -10,9 +10,13 @@
 
 #define DEBUG_SERIAL 0
 #define DEBUG_SHIFTER 0
-#define DEBUG_PEDALS 1
-#define DEBUG_SERIAL_MS 100
-#define NORMAL_MS       2
+#define DEBUG_PEDALS 0
+
+#define DEBUG_SERIAL_MS 15
+
+#define NORMAL_MS       15
+
+#define ANALOG_READ_DELAY delayMicroseconds(1500);
 // Joystick for game controller emulation
 Joystick_ joystick;
 
@@ -87,6 +91,7 @@ int shifter_gear = SHIFTER_NEUTRAL;
 int shifter_reverse = SHIFTER_REV_OFF;
 int shifter_mode = SHIFTER_MODE_H;
 int shifter_seq  = SHIFTER_SEQ_NO_SHIFT;
+int shifter_seq_press = SHIFTER_SEQ_NO_SHIFT;
 
 // Functions
 void read_shifter_buttons()
@@ -112,15 +117,22 @@ void read_shifter_buttons()
 
 void read_shifter_analogs()
 {
+  
     shifter_x_axis = analogRead(ANALOG_X); 
+    ANALOG_READ_DELAY
+    shifter_x_axis = analogRead(ANALOG_X); 
+    ANALOG_READ_DELAY
     shifter_y_axis = analogRead(ANALOG_Y); 
+    ANALOG_READ_DELAY
+    shifter_y_axis = analogRead(ANALOG_Y); 
+    ANALOG_READ_DELAY
 }
 
 void select_shifter_gear()
 {
     shifter_gear  = SHIFTER_NEUTRAL;     // Default position of shifter is neutral
-    shifter_seq   = SHIFTER_SEQ_NO_SHIFT;
-
+    shifter_seq_press = SHIFTER_SEQ_NO_SHIFT;
+    
     if (shifter_mode == SHIFTER_MODE_H)
     {
         if (shifter_x_axis < SHIFTER_X_12) // Shifter on the left?
@@ -166,17 +178,38 @@ void select_shifter_gear()
     }
     else  // If there shifter is set as a sequential mode
     {
-        if (shifter_y_axis > SHIFTER_SEQ_DOWN_THRES)
+      // shifter_seq   = SHIFTER_SEQ_NO_SHIFT;
+      #define SHIFTER_SEQ_NEU_TO_UP_THRESHOLD 430
+      #define SHIFTER_SEQ_UP_TO_NEU_THRESHOLD 500#
+      #define SHIFTER_SEQ_NEU_TO_DO_THRESHOLD 670
+      #define SHIFTER_SEQ_DO_TO_NEU_THRESHOLD 600
+
+        if (shifter_seq == SHIFTER_SEQ_NO_SHIFT)
         {
-            shifter_seq = SHIFTER_SEQ_DOWN_SHIFT;
+            if (shifter_y_axis > SHIFTER_SEQ_NEU_TO_DO_THRESHOLD)
+            {
+                shifter_seq = SHIFTER_SEQ_DOWN_SHIFT;
+                shifter_seq_press = SHIFTER_SEQ_DOWN_SHIFT;
+            }
+            else if(shifter_y_axis < SHIFTER_SEQ_NEU_TO_UP_THRESHOLD)
+            {
+                shifter_seq = SHIFTER_SEQ_UP_SHIFT;
+                shifter_seq_press = SHIFTER_SEQ_UP_SHIFT;
+            }
         }
-        else if(shifter_y_axis < SHIFTER_SEQ_UP_THRES)
+        else if(shifter_seq == SHIFTER_SEQ_UP_SHIFT)
         {
-            shifter_seq = SHIFTER_SEQ_UP_SHIFT;
+            if(shifter_y_axis > SHIFTER_SEQ_UP_TO_NEU_THRESHOLD)
+            {
+                shifter_seq = SHIFTER_SEQ_NO_SHIFT;
+            }
         }
-        else  // Middle section
+        else
         {
-            shifter_seq = SHIFTER_SEQ_NO_SHIFT;
+            if(shifter_y_axis < SHIFTER_SEQ_DO_TO_NEU_THRESHOLD)
+            {
+                shifter_seq = SHIFTER_SEQ_NO_SHIFT;
+            }
         }
     }    
 }
@@ -200,13 +233,13 @@ void set_shifter_inputs()
     }
     else
     {
-        if (shifter_seq == SHIFTER_SEQ_DOWN_SHIFT)
+        if (shifter_seq_press == SHIFTER_SEQ_DOWN_SHIFT)
         {
-          joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 1);        
+            joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 1);        
         }
-        else if(shifter_seq == SHIFTER_SEQ_UP_SHIFT)
+        else if(shifter_seq_press == SHIFTER_SEQ_UP_SHIFT)
         {
-          joystick.setButton(SHIFTER_SEQ_UP_BTN, 1);          
+            joystick.setButton(SHIFTER_SEQ_UP_BTN, 1);          
         }
     }
 
@@ -238,7 +271,7 @@ void serial_debug_shifter()
     Serial.print(" Mode: ");
     Serial.println(shifter_mode);
     Serial.print(" Shift: ");
-    Serial.println(shifter_seq);
+    Serial.println(shifter_seq_press);
 }
 #endif
 
@@ -283,10 +316,15 @@ void setup_shifter()
 #define ANALOG_BRAKE    A7
 #define ANALOG_CLUTCH   A8
 
-#define MAX_AXIS 1023
+#define MAX_AXIS 255
+
+#define PEDAL_AVG_SIZE 3
 
 // Reading of pedal positions
 struct Pedal {
+  int last_index;
+  int last[PEDAL_AVG_SIZE];
+  int cur_axis;
   byte pin;
   int min, max, cur, axis;  
 };
@@ -300,26 +338,40 @@ int pedal_axis_value(struct Pedal* pedal)
   if (physicalRange <= 0) {
     return 0;
   }
-
   int result = map(pedal->cur, pedal->min, pedal->max, 0, MAX_AXIS);
 
-  if (result < 0) {
-    return MAX_AXIS;
-  }
-  if (result > MAX_AXIS) {
+  if (result < 15) {
     return 0;
   }
-  return MAX_AXIS - result;
+  if (result > MAX_AXIS-15) {
+    return MAX_AXIS;
+  }
+  return result;
 }
 
 void update_pedal(struct Pedal* pedal){
     pedal->cur = analogRead(pedal->pin);
+    ANALOG_READ_DELAY
+    pedal->cur = analogRead(pedal->pin);
+    ANALOG_READ_DELAY
     
     // Auto calibration
     pedal->max = pedal->cur > pedal->max ? pedal->cur : pedal->max;
     pedal->min = pedal->min == 0 || pedal->cur < pedal->min ? pedal->cur : pedal->min;    
 
-    pedal->axis = pedal_axis_value(pedal);
+    pedal->cur_axis = pedal_axis_value(pedal);
+
+    pedal->last[pedal->last_index] = pedal->cur_axis;
+    pedal->last_index++;
+
+    if (pedal->last_index >= PEDAL_AVG_SIZE)
+      pedal->last_index = 0;
+
+    pedal->axis = 0;
+    for (int i = 0; i < PEDAL_AVG_SIZE; i++)
+      pedal->axis += pedal->last[i];
+
+    pedal->axis /= PEDAL_AVG_SIZE;
 }
 
 void setup_pedals()
@@ -375,6 +427,10 @@ void setup() {
     // Initialize Joystick Library
     joystick.begin(false);
 
+    joystick.setXAxisRange(0, MAX_AXIS);
+    joystick.setYAxisRange(0, MAX_AXIS);
+    joystick.setZAxisRange(0, MAX_AXIS);
+    
 #if DEBUG_SERIAL
     // Virtual serial interface configuration
     Serial.begin(38400);
@@ -390,6 +446,6 @@ void loop() {
 #if DEBUG_SERIAL 
   delay(DEBUG_SERIAL_MS);
 #else
-  delay(NORMAL_MS);
+ // delay(NORMAL_MS);
 #endif
 }
