@@ -1,3 +1,4 @@
+
 /**
     G25 Shifter and Pedal standalone code for Arduino Pro Micro
     Uses https://github.com/MHeironimus/ArduinoJoystickLibrary/tree/version-2.0 as a base with the example code
@@ -6,22 +7,47 @@
     - functionreturnfunction's work : https://github.com/functionreturnfunction/G27_Pedals_and_Shifter/blob/master/G27_Pedals_and_Shifter.ino
 */
 
+
+#define TEENSY 0
+#if !TEENSY
 #include <Joystick.h>
+Joystick_ joystick;
+#endif
 
 #define DEBUG_SERIAL 0
-#define DEBUG_SHIFTER 1
-#define DEBUG_PEDALS 0
+#define DEBUG_SHIFTER 0
+#define DEBUG_PEDALS 1
 
 #define DEBUG_SERIAL_MS 30
 
-#define NORMAL_MS       2
+#define NORMAL_MS       8
 
-#define ANALOG_READ_DELAY delayMicroseconds(200);
+#define ANALOG_READ_DELAY delayMicroseconds(100);
 // Joystick for game controller emulation
-Joystick_ joystick;
+
+
+// Pedal parameters
+#define MAX_AXIS 1024
+#define ARRAY_SIZE 1
+#define DEAD_ZONE 35
 
 //////////////////////////////// SHIFTER /////////////////////////////////
 // Shifter pin definitions
+
+#if TEENSY 
+#define PIN_DATA        17
+#define PIN_PARA        16
+#define PIN_CLK         15
+
+#define PIN_MODE_LED    13
+
+#define PIN_X_AXIS      19
+#define PIN_Y_AXIS      20
+
+#define ANALOG_X        A5
+#define ANALOG_Y        A6
+
+#else // !TEESNY
 #define PIN_DATA        14
 #define PIN_PARA        16
 #define PIN_CLK         10
@@ -34,15 +60,26 @@ Joystick_ joystick;
 #define ANALOG_X        A0
 #define ANALOG_Y        A1
 
+#endif
+
+#if TEENSY
+#define SHIFTER_X_12      600
+#define SHIFTER_X_56      900
+#define SHIFTER_Y_135     900
+#define SHIFTER_Y_246     400
+
+#define SHIFTER_SEQ_UP_THRES    450
+#define SHIFTER_SEQ_DOWN_THRES  650
+
+#else
 #define SHIFTER_X_12      375
 #define SHIFTER_X_56      650
-
-
 #define SHIFTER_Y_135     800
 #define SHIFTER_Y_246     300
 
 #define SHIFTER_SEQ_UP_THRES    450
 #define SHIFTER_SEQ_DOWN_THRES  650
+#endif
 
 // Shifter button array register
 #define SHIFTER_BUTTON_COUNT 16
@@ -64,21 +101,21 @@ int shifter_buttons[SHIFTER_BUTTON_COUNT];
 #define BUT_DPAD_BOTTOM     14
 #define BUT_DPAD_TOP        15
 
-#define SHIFTER_SEQ_DOWN_BTN 20
-#define SHIFTER_SEQ_UP_BTN 21
+#define SHIFTER_SEQ_DOWN_BTN 21
+#define SHIFTER_SEQ_UP_BTN 22
 
 // Shifter position registers
 int shifter_x_axis = 0;
 int shifter_y_axis = 0;
 
-#define SHIFTER_NEUTRAL 0
-#define SHIFTER_1       1
-#define SHIFTER_2       2
-#define SHIFTER_3       3
-#define SHIFTER_4       4
-#define SHIFTER_5       5
-#define SHIFTER_6       6
-#define SHIFTER_REVERSE 7
+#define SHIFTER_NEUTRAL 1
+#define SHIFTER_1       2
+#define SHIFTER_2       3
+#define SHIFTER_3       4
+#define SHIFTER_4       5
+#define SHIFTER_5       6
+#define SHIFTER_6       7
+#define SHIFTER_REVERSE 8
 
 #define SHIFTER_MODE_H    0
 #define SHIFTER_MODE_SEQ  1
@@ -126,12 +163,12 @@ void read_shifter_buttons()
 void read_shifter_analogs()
 {
     shifter_x_axis = analogRead(ANALOG_X);
-    ANALOG_READ_DELAY
-    shifter_x_axis = analogRead(ANALOG_X);
+    //ANALOG_READ_DELAY
+    //shifter_x_axis = analogRead(ANALOG_X);
     
     shifter_y_axis = analogRead(ANALOG_Y);
-    ANALOG_READ_DELAY
-    shifter_y_axis = analogRead(ANALOG_Y);
+    //ANALOG_READ_DELAY
+    //shifter_y_axis = analogRead(ANALOG_Y);
 }
 
 void select_shifter_gear()
@@ -148,7 +185,7 @@ void select_shifter_gear()
         shifter_gear = SHIFTER_1;  // 1st gear
       }
       if (shifter_y_axis < SHIFTER_Y_246)
-      {
+    {
         shifter_gear = SHIFTER_2;  // 2nd gear
       }
     }
@@ -185,10 +222,17 @@ void select_shifter_gear()
   else  // If there shifter is set as a sequential mode
   {
     // shifter_seq   = SHIFTER_SEQ_NO_SHIFT;
-#define SHIFTER_SEQ_NEU_TO_UP_THRESHOLD 300
-#define SHIFTER_SEQ_UP_TO_NEU_THRESHOLD 500
-#define SHIFTER_SEQ_NEU_TO_DO_THRESHOLD 590
-#define SHIFTER_SEQ_DO_TO_NEU_THRESHOLD 600    
+#if TEENSY
+  #define SHIFTER_SEQ_NEU_TO_UP_THRESHOLD 500
+  #define SHIFTER_SEQ_UP_TO_NEU_THRESHOLD 550
+  #define SHIFTER_SEQ_NEU_TO_DO_THRESHOLD 900
+  #define SHIFTER_SEQ_DO_TO_NEU_THRESHOLD 800    
+#else    
+  #define SHIFTER_SEQ_NEU_TO_UP_THRESHOLD 300
+  #define SHIFTER_SEQ_UP_TO_NEU_THRESHOLD 500
+  #define SHIFTER_SEQ_NEU_TO_DO_THRESHOLD 590
+  #define SHIFTER_SEQ_DO_TO_NEU_THRESHOLD 600    
+#endif
     if (shifter_seq_mode == SHIFTER_SEQ_MODE_TAP)
     {
         if (shifter_seq == SHIFTER_SEQ_NO_SHIFT)
@@ -238,36 +282,64 @@ void select_shifter_gear()
 void set_shifter_inputs()
 {
   // Reset shifter position buttons
-  for (int i = 0; i < 7; i++)
+  for (int i = 1; i < 8; i++)
   {
+    #if TEENSY
+    Joystick.button(i, 0);
+    #else
     joystick.setButton(i, 0);
+    #endif
   }
-  joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 0);
-  joystick.setButton(SHIFTER_SEQ_UP_BTN, 0);
+#if TEENSY
+    Joystick.button(SHIFTER_SEQ_DOWN_BTN, 0);
+    Joystick.button(SHIFTER_SEQ_UP_BTN, 0);
+
+#else
+    joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 0);
+    joystick.setButton(SHIFTER_SEQ_UP_BTN, 0);
+#endif
 
   if (shifter_mode == SHIFTER_MODE_H)
   {
     if (shifter_gear != SHIFTER_NEUTRAL)
     {
+#if TEENSY
+    Joystick.button(shifter_gear - 1, 1);
+
+#else
       joystick.setButton(shifter_gear - 1, 1);
+#endif
     }
   }
   else
   {
     if (shifter_seq_press == SHIFTER_SEQ_DOWN_SHIFT)
     {
+#if TEENSY
+    Joystick.button(SHIFTER_SEQ_DOWN_BTN, 1);
+#else
       joystick.setButton(SHIFTER_SEQ_DOWN_BTN, 1);
+#endif
     }
     else if (shifter_seq_press == SHIFTER_SEQ_UP_SHIFT)
     {
+#if TEENSY
+    Joystick.button(SHIFTER_SEQ_UP_BTN, 1);
+#else
       joystick.setButton(SHIFTER_SEQ_UP_BTN, 1);
+#endif
     }
   }
 
   // Starts at 4 to skip mode and reverse buttons which are not relevant
   for (int i = 4; i < SHIFTER_BUTTON_COUNT; i++)
   {
-    joystick.setButton(i + 3/* 7 - 4 */, shifter_buttons[i]);
+    
+#if TEENSY
+    Joystick.button(i + 4/* 7 - 4 */, shifter_buttons[i]);
+#else
+    joystick.setButton(i + 4/* 7 - 4 */, shifter_buttons[i]);
+#endif
   }
 }
 
@@ -337,6 +409,16 @@ void setup_shifter()
 
 //////////////////////////////// BEGIN PEDALS /////////////////////////////////
 
+#if TEENSY 
+#define PIN_GAS     23
+#define PIN_BRAKE   22
+#define PIN_CLUTCH  21
+
+#define ANALOG_GAS      A9
+#define ANALOG_BRAKE    A8
+#define ANALOG_CLUTCH   A7
+
+#else
 #define PIN_GAS     4
 #define PIN_BRAKE   6
 #define PIN_CLUTCH  8
@@ -344,46 +426,68 @@ void setup_shifter()
 #define ANALOG_GAS      A6
 #define ANALOG_BRAKE    A7
 #define ANALOG_CLUTCH   A8
-
-#define MAX_AXIS 255
+#endif
 
 // Reading of pedal positions
 struct Pedal {
   byte pin;
   int min, max, cur, axis;
+  int values[ARRAY_SIZE];
+  int current_index = 0;
 };
 
 // Pedal objects
 Pedal Gas, Brake, Clutch;
-
 int pedal_axis_value(struct Pedal* pedal)
 {
   int physicalRange = pedal->max - pedal->min;
   if (physicalRange <= 0) {
     return 0;
   }
-  int result = map(pedal->cur, pedal->min, pedal->max, 0, MAX_AXIS);
+  int result = map(pedal->cur, pedal->min + DEAD_ZONE, pedal->max - DEAD_ZONE, 0, MAX_AXIS);
 
-  if (result < 5) {
-    return 0;
+  if (result < DEAD_ZONE) {
+    result = 0;
   }
-  if (result > MAX_AXIS - 5) {
-    return MAX_AXIS;
+  if (result > MAX_AXIS - DEAD_ZONE) {
+    result = MAX_AXIS;
   }
   return result;
 }
 
+int get_average(struct Pedal* pedal) {
+  int result = 0;
+  for (int i = 0; i < ARRAY_SIZE; i++){
+    result += pedal->values[i];
+  }
+  return result / ARRAY_SIZE;
+}
+
 void update_pedal(struct Pedal* pedal) {
+  
+  //pedal->cur = analogRead(pedal->pin);
+#if DEBUG_SERIAL && DEBUG_PEDALS
+ // Serial.print("First Read : ");
+ // Serial.println(pedal->cur);
+#endif
+ // ANALOG_READ_DELAY
   pedal->cur = analogRead(pedal->pin);
-  ANALOG_READ_DELAY
-  pedal->cur = analogRead(pedal->pin);
-  ANALOG_READ_DELAY
+#if DEBUG_SERIAL && DEBUG_PEDALS
+  Serial.print("Second Read : ");
+  Serial.println(pedal->cur);
+#endif
+ // ANALOG_READ_DELAY
 
   // Auto calibration
   pedal->max = pedal->cur > pedal->max ? pedal->cur : pedal->max;
   pedal->min = pedal->min == 0 || pedal->cur < pedal->min ? pedal->cur : pedal->min;
 
-  pedal->axis = pedal_axis_value(pedal);
+  // Get current value
+  pedal->values[pedal->current_index % ARRAY_SIZE] = pedal_axis_value(pedal);
+  pedal->current_index = ++pedal->current_index % ARRAY_SIZE;
+  int result = get_average(pedal);  
+
+  pedal->axis = result;
 }
 
 void setup_pedals()
@@ -394,6 +498,9 @@ void setup_pedals()
   Gas.min = MAX_AXIS;
   Brake.min = MAX_AXIS;
   Clutch.min = MAX_AXIS;
+  Gas.max = 0;
+  Brake.max = 0;
+  Clutch.max = 0;
 
 }
 #if DEBUG_SERIAL && DEBUG_PEDALS
@@ -411,13 +518,25 @@ void serial_debug_pedals()
 void read_pedals()
 {
   // Get wheel inputs
+#if DEBUG_SERIAL && DEBUG_PEDALS
+  Serial.println("Gas pedal data");
+#endif
   update_pedal(&Gas);
+ #if DEBUG_SERIAL && DEBUG_PEDALS
+  Serial.println("//////////////");
+#endif
   update_pedal(&Brake);
   update_pedal(&Clutch);
 
+#if TEENSY
+  Joystick.X(Gas.axis);
+  Joystick.Y(Brake.axis);
+  Joystick.Z(Clutch.axis);
+#else
   joystick.setXAxis(Gas.axis);
   joystick.setYAxis(Brake.axis);
   joystick.setZAxis(Clutch.axis);
+#endif 
 
 #if DEBUG_SERIAL && DEBUG_PEDALS
   serial_debug_pedals();
@@ -431,12 +550,16 @@ void setup() {
   setup_shifter();
   setup_pedals();
 
+
+#if TEENSY
+  Joystick.useManualSend(true);
+#else
   // Initialize Joystick Library
   joystick.begin(false);
-
   joystick.setXAxisRange(0, MAX_AXIS);
   joystick.setYAxisRange(0, MAX_AXIS);
   joystick.setZAxisRange(0, MAX_AXIS);
+#endif
 
 #if DEBUG_SERIAL
   // Virtual serial interface configuration
@@ -449,7 +572,12 @@ void loop() {
   read_shifter();
   read_pedals();
 
+#if TEENSY
+  Joystick.send_now();
+#else
   joystick.sendState();
+#endif
+  
 #if DEBUG_SERIAL
   delay(DEBUG_SERIAL_MS);
 #else
