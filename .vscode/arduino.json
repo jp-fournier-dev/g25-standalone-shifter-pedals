@@ -2,5 +2,6 @@
     "port": "COM4",
     "board": "SparkFun:avr:promicro",
     "configuration": "cpu=8MHzatmega32U4",
-    "programmer": "AVRISP mkII"
+    "programmer": "AVRISP mkII",
+    "sketch": "standalone\\standalone.ino"
 }
