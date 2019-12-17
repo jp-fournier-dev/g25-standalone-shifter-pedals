@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "C:\\Users\\fourn\\AppData\\Local\\Arduino15\\packages\\SparkFun\\hardware\\avr\\1.1.12\\**"
+            ],
+            "forcedInclude": [],
+            "intelliSenseMode": "msvc-x64"
+        }
+    ],
+    "version": 4
+}
